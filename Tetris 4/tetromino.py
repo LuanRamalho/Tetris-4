@@ -1,9 +1,5 @@
-# Tetromino (a Tetris clone)
-# By Al Sweigart al@inventwithpython.com
-# http://inventwithpython.com/pygame
-# Released under a "Simplified BSD" license
-
 import random, time, pygame, sys
+import json
 from pygame.locals import *
 
 FPS = 25
@@ -40,6 +36,21 @@ TEXTSHADOWCOLOR = GRAY
 COLORS      = (     BLUE,      GREEN,      RED,      YELLOW)
 LIGHTCOLORS = (LIGHTBLUE, LIGHTGREEN, LIGHTRED, LIGHTYELLOW)
 assert len(COLORS) == len(LIGHTCOLORS) # each color must have light color
+
+def loadHighScore():
+    try:
+        with open("highscore.json", "r") as f:
+            data = json.load(f)
+            return data.get("highscore", 0)
+    except FileNotFoundError:
+        # Se o arquivo não existir, cria um com o highscore 0
+        with open("highscore.json", "w") as f:
+            json.dump({"highscore": 0}, f)
+        return 0
+
+def saveHighScore(highscore):
+    with open("highscore.json", "w") as f:
+        json.dump({"highscore": highscore}, f)
 
 TEMPLATEWIDTH = 5
 TEMPLATEHEIGHT = 5
@@ -164,19 +175,23 @@ def main():
     BIGFONT = pygame.font.Font('freesansbold.ttf', 100)
     pygame.display.set_caption('Tetromino')
 
+    # Carregar o HighScore do arquivo JSON
+    highscore = loadHighScore()
+
     showTextScreen('Tetromino')
-    while True: # game loop
+    while True:  # loop do jogo
         if random.randint(0, 1) == 0:
             pygame.mixer.music.load('tetrisb.mid')
         else:
             pygame.mixer.music.load('tetrisc.mid')
         pygame.mixer.music.play(-1, 0.0)
-        runGame()
+        highscore = runGame(highscore)  # Passando o highscore para a função runGame
         pygame.mixer.music.stop()
         showTextScreen('Game Over')
+        saveHighScore(highscore)  # Salvar o highscore atualizado
 
 
-def runGame():
+def runGame(highscore):
     # setup variables for the start of the game
     board = getBlankBoard()
     lastMoveDownTime = time.time()
@@ -199,9 +214,10 @@ def runGame():
             lastFallTime = time.time() # reset lastFallTime
 
             if not isValidPosition(board, fallingPiece):
-                return # can't fit a new piece on the board, so game over
+                if score > highscore:
+                    highscore = score  # Atualiza o highscore se o jogador obtiver uma pontuação maior
+                return highscore  # can't fit a new piece on the board, so game over
 
-        checkForQuit()
         for event in pygame.event.get(): # event handling loop
             if event.type == KEYUP:
                 if (event.key == K_p):
@@ -287,16 +303,18 @@ def runGame():
                 fallingPiece['y'] += 1
                 lastFallTime = time.time()
 
-        # drawing everything on the screen
+        # desenhar tudo na tela
         DISPLAYSURF.fill(BGCOLOR)
         drawBoard(board)
-        drawStatus(score, level)
+        drawStatus(score, level, highscore)  # Adicionado o highscore
         drawNextPiece(nextPiece)
-        if fallingPiece != None:
+        if fallingPiece is not None:
             drawPiece(fallingPiece)
 
         pygame.display.update()
         FPSCLOCK.tick(FPS)
+
+    return highscore
 
 
 def makeTextObjs(text, font, color):
@@ -465,18 +483,24 @@ def drawBoard(board):
             drawBox(x, y, board[x][y])
 
 
-def drawStatus(score, level):
-    # draw the score text
+def drawStatus(score, level, highscore):
+    # desenha o texto da pontuação
     scoreSurf = BASICFONT.render('Score: %s' % score, True, TEXTCOLOR)
     scoreRect = scoreSurf.get_rect()
     scoreRect.topleft = (WINDOWWIDTH - 150, 20)
     DISPLAYSURF.blit(scoreSurf, scoreRect)
 
-    # draw the level text
+    # desenha o texto do nível
     levelSurf = BASICFONT.render('Level: %s' % level, True, TEXTCOLOR)
     levelRect = levelSurf.get_rect()
-    levelRect.topleft = (WINDOWWIDTH - 150, 50)
+    levelRect.topleft = (WINDOWWIDTH - 150, 80)
     DISPLAYSURF.blit(levelSurf, levelRect)
+
+    # desenha o highscore
+    highscoreSurf = BASICFONT.render('High Score: %s' % highscore, True, TEXTCOLOR)
+    highscoreRect = highscoreSurf.get_rect()
+    highscoreRect.topleft = (WINDOWWIDTH - 150, 50)
+    DISPLAYSURF.blit(highscoreSurf, highscoreRect)
 
 
 def drawPiece(piece, pixelx=None, pixely=None):
@@ -496,7 +520,7 @@ def drawNextPiece(piece):
     # draw the "next" text
     nextSurf = BASICFONT.render('Next:', True, TEXTCOLOR)
     nextRect = nextSurf.get_rect()
-    nextRect.topleft = (WINDOWWIDTH - 120, 80)
+    nextRect.topleft = (WINDOWWIDTH - 150, 100)
     DISPLAYSURF.blit(nextSurf, nextRect)
     # draw the "next" piece
     drawPiece(piece, pixelx=WINDOWWIDTH-120, pixely=100)
